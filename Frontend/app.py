@@ -166,5 +166,4 @@ with tab4:
 # TAB 5: Estacionalidad y Tendencias
 # ------------------------------
 with tab5:
-    df_sum["Semana"] = df_sum["Fecha"].dt.isocalendar().week
-    weekly_avg =
+    df_sum["Semana"] = df_sum["
