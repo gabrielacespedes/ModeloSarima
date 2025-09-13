@@ -3,7 +3,7 @@ import pandas as pd
 import numpy as np
 import matplotlib.pyplot as plt
 from io import BytesIO
-from pmdarima import auto_arima
+from statsmodels.tsa.statespace.sarimax import SARIMAX
 from sklearn.metrics import mean_squared_error
 
 # ==============================
@@ -23,16 +23,13 @@ with st.spinner("Cargando datos..."):
     else:
         df_hist = pd.read_excel("../Backend/ventas_raw.xlsx")
 
-# Columnas de clientes
 df_hist = df_hist[["Fecha Emisión", "Importe Final", "Doc. Auxiliar", "Razón Social"]].copy()
 df_hist["Fecha Emisión"] = pd.to_datetime(df_hist["Fecha Emisión"])
 
-# Serie diaria completa
 df_sum = df_hist.groupby("Fecha Emisión", as_index=False)["Importe Final"].sum()
 full_range = pd.date_range(df_sum["Fecha Emisión"].min(), df_sum["Fecha Emisión"].max(), freq="D")
 df_sum = df_sum.set_index("Fecha Emisión").reindex(full_range).fillna(0).rename_axis("Fecha").reset_index()
 
-# Media móvil para días sin ventas
 df_sum["Importe Final"] = df_sum["Importe Final"].replace(0, np.nan)
 df_sum["Importe Final"] = df_sum["Importe Final"].fillna(df_sum["Importe Final"].rolling(7, min_periods=1).mean())
 df_sum["Importe Final"] = df_sum["Importe Final"].fillna(method="bfill").fillna(method="ffill")
@@ -40,31 +37,26 @@ df_sum["Importe Final"] = df_sum["Importe Final"].fillna(method="bfill").fillna(
 # ==============================
 # SLIDER HORIZONTE
 # ==============================
-horizon = st.slider(
-    "Selecciona horizonte de predicción (días):",
-    min_value=7, 
-    max_value=14, 
-    value=14       
-)
-
+horizon = st.slider("Selecciona horizonte de predicción (días):", min_value=7, max_value=14, value=14)
 
 # ==============================
-# ENTRENAR AUTO_ARIMA
+# ENTRENAR SARIMAX
 # ==============================
 @st.cache_resource
 def entrenar_sarima(series, seasonal_period=7):
-    model = auto_arima(series, seasonal=True, m=seasonal_period,
-                       start_p=1, start_q=1, max_p=5, max_q=5,
-                       start_P=0, start_Q=0, max_P=3, max_Q=3,
-                       suppress_warnings=True, stepwise=True)
-    return model
+    model = SARIMAX(series,
+                    order=(1,1,1),
+                    seasonal_order=(1,1,1,seasonal_period),
+                    enforce_stationarity=False,
+                    enforce_invertibility=False)
+    results = model.fit(disp=False)
+    return results
 
 with st.spinner("Entrenando modelo..."):
     modelo = entrenar_sarima(df_sum["Importe Final"], seasonal_period=14)
-    forecast, conf_int = modelo.predict(n_periods=horizon, return_conf_int=True)
+    forecast = modelo.forecast(steps=horizon)
     fechas_forecast = pd.date_range(df_sum["Fecha"].max() + pd.Timedelta(days=1), periods=horizon)
-    df_forecast = pd.DataFrame({"Fecha": fechas_forecast, "Predicción": forecast,
-                                "LI": conf_int[:,0], "LS": conf_int[:,1]})
+    df_forecast = pd.DataFrame({"Fecha": fechas_forecast, "Predicción": forecast})
 
 # ==============================
 # PESTAÑAS
@@ -84,7 +76,6 @@ with tab1:
     fig, ax = plt.subplots(figsize=(12,6))
     ax.plot(df_sum["Fecha"], df_sum["Importe Final"], label="Histórico", marker="o")
     ax.plot(df_forecast["Fecha"], df_forecast["Predicción"], label="Predicción", marker="x", color="red")
-    ax.fill_between(df_forecast["Fecha"], df_forecast["LI"], df_forecast["LS"], color="pink", alpha=0.3)
     ax.set_title("Ventas Histórico + Predicción")
     ax.set_ylabel("Ventas (S/)")
     ax.legend()
@@ -95,7 +86,6 @@ with tab1:
 # ------------------------------
 with tab2:
     st.dataframe(df_forecast[["Fecha", "Predicción"]], use_container_width=True)
-    # Descargar
     output = BytesIO()
     with pd.ExcelWriter(output, engine="openpyxl") as writer:
         df_forecast[["Fecha", "Predicción"]].to_excel(writer, index=False, sheet_name="Predicciones")
@@ -107,7 +97,7 @@ with tab2:
 # ------------------------------
 with tab3:
     df_eval = df_sum.copy()
-    df_eval["yhat"] = modelo.predict_in_sample()
+    df_eval["yhat"] = modelo.fittedvalues
     df_eval_recent = df_eval.tail(horizon)
     df_eval_recent["error"] = df_eval_recent["Importe Final"] - df_eval_recent["yhat"]
 
@@ -124,14 +114,11 @@ with tab3:
     ax_eval.legend()
     st.pyplot(fig_eval)
 
-
-# ==============================
-# PESTAÑA CLIENTES (BI)
-# ==============================
-with tab4:  # Asumiendo que agregas un nuevo tab: tab4
+# ------------------------------
+# TAB 4: Análisis por Clientes
+# ------------------------------
+with tab4:
     st.subheader("📊 Análisis de Clientes (BI)")
-
-    # KPIs generales
     total_ventas = df_hist.groupby("Razón Social")["Importe Final"].sum().sum()
     num_clientes = df_hist["Razón Social"].nunique()
     ticket_promedio = df_hist["Importe Final"].sum() / df_hist.shape[0]
@@ -141,16 +128,13 @@ with tab4:  # Asumiendo que agregas un nuevo tab: tab4
     col2.metric("👥 Número de Clientes", f"{num_clientes}")
     col3.metric("🧾 Ticket Promedio", f"S/ {ticket_promedio:,.2f}")
 
-    # Top 10 clientes por ventas
     top_clientes = df_hist.groupby(["Doc. Auxiliar", "Razón Social"])["Importe Final"].sum().sort_values(ascending=False).head(10).reset_index()
     st.markdown("### 🏆 Top 10 Clientes por Ventas")
     st.dataframe(top_clientes, use_container_width=True, height=300)
 
-    # Selección de cliente para análisis temporal
     cliente_seleccionado = st.selectbox("Selecciona un cliente para ver su evolución", top_clientes["Razón Social"].unique())
     df_cliente = df_hist[df_hist["Razón Social"] == cliente_seleccionado].sort_values("Fecha Emisión")
 
-    # Evolución de ventas del cliente
     st.markdown(f"### 📈 Evolución de ventas: {cliente_seleccionado}")
     fig_cliente, ax_cliente = plt.subplots(figsize=(10,4))
     ax_cliente.plot(df_cliente["Fecha Emisión"], df_cliente["Importe Final"], marker="o", color="tab:blue")
@@ -159,7 +143,6 @@ with tab4:  # Asumiendo que agregas un nuevo tab: tab4
     ax_cliente.set_title(f"Ventas Diarias de {cliente_seleccionado}")
     st.pyplot(fig_cliente)
 
-    # Estacionalidad mensual del cliente
     df_cliente["mes"] = df_cliente["Fecha Emisión"].dt.month
     ventas_mes = df_cliente.groupby("mes")["Importe Final"].sum().reset_index()
     st.markdown(f"### 📅 Ventas por Mes: {cliente_seleccionado}")
@@ -170,7 +153,6 @@ with tab4:  # Asumiendo que agregas un nuevo tab: tab4
     ax_mes.set_title(f"Estacionalidad Mensual de {cliente_seleccionado}")
     st.pyplot(fig_mes)
 
-    # Distribución de ventas por cliente
     st.markdown("### 📊 Distribución de Ventas por Cliente")
     ventas_clientes = df_hist.groupby("Razón Social")["Importe Final"].sum().sort_values(ascending=False).reset_index()
     fig_dist, ax_dist = plt.subplots(figsize=(10,4))
@@ -180,16 +162,9 @@ with tab4:  # Asumiendo que agregas un nuevo tab: tab4
     ax_dist.set_title("Top 20 Clientes")
     st.pyplot(fig_dist)
 
-
 # ------------------------------
 # TAB 5: Estacionalidad y Tendencias
 # ------------------------------
 with tab5:
     df_sum["Semana"] = df_sum["Fecha"].dt.isocalendar().week
-    weekly_avg = df_sum.groupby("Semana")["Importe Final"].mean().reset_index()
-    fig_season, ax_season = plt.subplots(figsize=(10,5))
-    ax_season.plot(weekly_avg["Semana"], weekly_avg["Importe Final"], marker="o", color="green")
-    ax_season.set_title("Promedio de ventas por semana (tendencia estacional)")
-    ax_season.set_xlabel("Semana")
-    ax_season.set_ylabel("Ventas (S/)")
-    st.pyplot(fig_season)
+    weekly_avg =
