@@ -166,4 +166,28 @@ with tab4:
 # TAB 5: Estacionalidad y Tendencias
 # ------------------------------
 with tab5:
-    df_sum["Semana"] = df_sum["
+    st.subheader("📆 Tendencias Estacionales")
+
+    # Promedio por semana del año
+    df_sum["Semana"] = df_sum["Fecha"].dt.isocalendar().week
+    weekly_avg = df_sum.groupby("Semana")["Importe Final"].mean().reset_index()
+
+    fig_season, ax_season = plt.subplots(figsize=(10,5))
+    ax_season.plot(weekly_avg["Semana"], weekly_avg["Importe Final"], marker="o", color="green")
+    ax_season.set_title("Promedio de ventas por semana (tendencia estacional)")
+    ax_season.set_xlabel("Semana del año")
+    ax_season.set_ylabel("Ventas promedio (S/)")
+    st.pyplot(fig_season)
+
+    # Promedio por día de la semana
+    df_sum["DiaSemana"] = df_sum["Fecha"].dt.day_name()
+    weekday_avg = df_sum.groupby("DiaSemana")["Importe Final"].mean().reindex([
+        "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"
+    ]).reset_index()
+
+    fig_weekday, ax_weekday = plt.subplots(figsize=(10,5))
+    ax_weekday.bar(weekday_avg["DiaSemana"], weekday_avg["Importe Final"], color="skyblue")
+    ax_weekday.set_title("Promedio de ventas por día de la semana")
+    ax_weekday.set_xlabel("Día")
+    ax_weekday.set_ylabel("Ventas promedio (S/)")
+    st.pyplot(fig_weekday)
