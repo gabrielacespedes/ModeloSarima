@@ -1,16 +1,12 @@
-numpy
-pandas
-scikit-learn
-scipy
-statsmodels
-joblib
-Cython
-setuptools
 streamlit
 fastapi
 uvicorn
+pandas
 openpyxl
 requests
 matplotlib
-pmdarima
+statsmodels
+scikit-learn
+numpy
+
 
