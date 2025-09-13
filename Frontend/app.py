@@ -1,10 +1,3 @@
-¡Aquí tienes, Gabriela! 🎯 Este es el **código completo y corregido de tu `app.py`**, con búsqueda automática de parámetros SARIMA usando `statsmodels`, sin `pmdarima`, y listo para desplegarse en **Streamlit Cloud** sin errores. Incluye todo: carga de datos, entrenamiento, predicción, evaluación, visualización y análisis por cliente.
-
----
-
-### ✅ `app.py` — Versión final con búsqueda automática SARIMA
-
-```python
 import streamlit as st
 import pandas as pd
 import numpy as np
