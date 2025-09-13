@@ -21,7 +21,8 @@ with st.spinner("Cargando datos..."):
     if uploaded_file:
         df_hist = pd.read_excel(uploaded_file)
     else:
-        df_hist = pd.read_excel("../Backend/ventas_raw.xlsx")
+        df_hist = pd.read_excel("ventas_raw.xlsx")
+
 
 df_hist = df_hist[["Fecha Emisión", "Importe Final", "Doc. Auxiliar", "Razón Social"]].copy()
 df_hist["Fecha Emisión"] = pd.to_datetime(df_hist["Fecha Emisión"])
