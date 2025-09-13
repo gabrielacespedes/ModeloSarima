@@ -1,0 +1,7 @@
+streamlit
+fastapi
+uvicorn
+pandas
+openpyxl
+pmdarima
+requests
