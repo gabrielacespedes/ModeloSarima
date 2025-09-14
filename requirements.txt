@@ -3,10 +3,5 @@ fastapi
 uvicorn
 pandas
 openpyxl
+pmdarima
 requests
-matplotlib
-statsmodels
-scikit-learn
-numpy
-
-
